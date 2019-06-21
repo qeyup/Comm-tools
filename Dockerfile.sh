@@ -24,3 +24,4 @@ pip3 install pyserial
 
 # Install CommSimulator
 cp CommSimulator.py /usr/bin/CommSimulator
+chmod +x /usr/bin/CommSimulator
