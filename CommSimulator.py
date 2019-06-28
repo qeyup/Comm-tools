@@ -294,14 +294,15 @@ def main(argv=sys.argv[1:]):
         # Define reader thread
         def reader():
             print ("-", threading.currentThread().getName(), 'Lanzado')
-            try:
-                # Initialize variables
-                last_error=""
-                frame=b""
-                shared = module.static_data()
 
-                # Read from device
-                while run:
+            # Initialize variables
+            last_error=""
+            frame=b""
+            shared = module.static_data()
+
+            # Read from device
+            while run:
+                try:
                     # Reload module (to get changes)
                     imp.reload(module)
 
@@ -331,24 +332,23 @@ def main(argv=sys.argv[1:]):
                                 except Exception as e:
                                     print (e)
                             sim.sendData(response)
-
-            except Exception as e:
-                if (run == True) and (last_error != traceback.format_exc()):
-                    last_error = traceback.format_exc()
-                    print(traceback.format_exc())
+                except Exception as e:
+                    frame=b''
+                    if (run == True) and (last_error != traceback.format_exc()):
+                        last_error = traceback.format_exc()
+                        print(traceback.format_exc())
             print ("-", threading.currentThread().getName(), 'Deteniendo')
 
 
         # Define sender thread
         def sender():
             print ("-", threading.currentThread().getName(), 'Lanzado')
-            try:
-                # Initialize variables
-                last_error=""
-                frame=b""
-                shared = module.static_data()
+            # Initialize variables
+            last_error=""
+            shared = module.static_data()
 
-                while run:
+            while run:
+                try:
                     # Reload module (to get changes)
                     imp.reload(module)
 
@@ -369,10 +369,10 @@ def main(argv=sys.argv[1:]):
                             except Exception as e:
                                 print (e)
                         sim.sendData(output_frame)
-            except Exception as e:
-                if (run == True) and (last_error != traceback.format_exc()):
-                    last_error = traceback.format_exc()
-                    print(traceback.format_exc())
+                except Exception as e:
+                    if (run == True) and (last_error != traceback.format_exc()):
+                        last_error = traceback.format_exc()
+                        print(traceback.format_exc())
             print ("-", threading.currentThread().getName(), 'Deteniendo')
 
 
