@@ -187,6 +187,18 @@ def main(argv=sys.argv[1:]):
         action='store_true',
         help='Print input (in ascii)')
     parser.add_argument(
+        '--print-input-accumulated-raw',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print accumulated input (in bytes)')
+    parser.add_argument(
+        '--print-input-accumulated-ascii',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print accumulated input (in ascii)')
+    parser.add_argument(
         '--print-output-raw',
         required=False,
         default=False,
@@ -306,18 +318,27 @@ def main(argv=sys.argv[1:]):
                     # Reload module (to get changes)
                     imp.reload(module)
 
+                    # Read data
                     byte = sim.readData()
-                    if args.print_input_raw == True :
-                        print("> input (hex): %s" % bytes(byte).hex())
-                    if args.print_input_ascii == True:
-                        try:
-                            print("> input (ascii): %s" % bytes(byte).decode('ascii'))
-                        except Exception as e:
-                            print (e)
-                    frame += bytes(byte)
 
                     # Process data
-                    if frame != b"":
+                    if byte != b"":
+                        if args.print_input_raw == True :
+                            print("> input (hex): %s" % bytes(byte).hex())
+                        if args.print_input_ascii == True:
+                            try:
+                                print("> input (ascii): %s" % bytes(byte).decode('ascii'))
+                            except Exception as e:
+                                print (e)
+                        frame += bytes(byte)
+                        if args.print_input_accumulated_raw == True :
+                            print("> accumulated input (hex): %s" % bytes(frame).hex())
+                        if args.print_input_accumulated_ascii == True:
+                            try:
+                                print("> accumulated input (ascii): %s" % bytes(frame).decode('ascii'))
+                            except Exception as e:
+                                print (e)
+
                         response = b""
                         shared, frame,response = module.processData(shared, frame, response)
                         if last_error != "":
