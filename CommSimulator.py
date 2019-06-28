@@ -187,17 +187,17 @@ def main(argv=sys.argv[1:]):
         action='store_true',
         help='Print input (in ascii)')
     parser.add_argument(
-        '--print-input-accumulated-raw',
+        '--print-input-processed-raw',
         required=False,
         default=False,
         action='store_true',
-        help='Print accumulated input (in bytes)')
+        help='Print processed input only when the input is processed (in bytes)')
     parser.add_argument(
-        '--print-input-accumulated-ascii',
+        '--print-input-processed-ascii',
         required=False,
         default=False,
         action='store_true',
-        help='Print accumulated input (in ascii)')
+        help='Print processed input only when the input is processed (in ascii)')
     parser.add_argument(
         '--print-output-raw',
         required=False,
@@ -331,19 +331,20 @@ def main(argv=sys.argv[1:]):
                             except Exception as e:
                                 print (e)
                         frame += bytes(byte)
-                        if args.print_input_accumulated_raw == True :
-                            print("> accumulated input (hex): %s" % bytes(frame).hex())
-                        if args.print_input_accumulated_ascii == True:
-                            try:
-                                print("> accumulated input (ascii): %s" % bytes(frame).decode('ascii'))
-                            except Exception as e:
-                                print (e)
-
+                        frame_aux = frame
                         response = b""
                         shared, frame,response = module.processData(shared, frame, response)
                         if last_error != "":
                             last_error = ""
                             print("Module error is fix now.")
+                        if frame != frame_aux:
+                            if args.print_input_processed_raw == True :
+                                print("> input* (hex): %s" % bytes(frame_aux).hex())
+                            if args.print_input_processed_ascii == True:
+                                try:
+                                    print("> input* (ascii): %s" % bytes(frame_aux).decode('ascii'))
+                                except Exception as e:
+                                    print (e)
                         if response != b"":
                             if args.print_output_raw == True :
                                 print("< output (hex): %s" % bytes(response).hex())
