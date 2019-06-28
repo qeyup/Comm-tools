@@ -174,6 +174,30 @@ def main(argv=sys.argv[1:]):
         required=False,
         default=5000,
         help='Listener port.  (only for --type tcp-listen)')
+    parser.add_argument(
+        '--print-input-raw',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print input (in bytes)')
+    parser.add_argument(
+        '--print-input-ascii',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print input (in ascii)')
+    parser.add_argument(
+        '--print-output-raw',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print output (in bytes)')
+    parser.add_argument(
+        '--print-output-ascii',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Print output (in ascii)')
     args = parser.parse_args(argv)
 
 
@@ -215,7 +239,7 @@ def main(argv=sys.argv[1:]):
             else:
                 file_content = ""
                 file_content += "# Static data.\n"
-                file_content += "# Note: is necesary to restart execution to apply any change\n"
+                file_content += "# Note: is necesary to restart execution to apply any change in the static data\n"
                 file_content += "class static_data:\n"
                 file_content += "   # Trigger/timeout time (in seconds). set to None to wait for data.\n"
                 file_content += "   module_timeout = 1\n"
@@ -229,12 +253,8 @@ def main(argv=sys.argv[1:]):
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "# Process incoming data and send response.\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change in processData() function.\n"
                 file_content += "def processData(static, input_bytes, output_bytes):\n"
-                file_content += "   try:\n"
-                file_content += "       print(\"hex: %s\\nascii: %s\\n\" % (bytes(input_bytes).hex(), bytes(input_bytes).decode('utf-8')))\n"
-                file_content += "   except:\n"
-                file_content += "       pass\n"
                 file_content += "   input_bytes = b''\n"
                 file_content += "   output_bytes = b''\n"
                 file_content += "   return static, input_bytes, output_bytes\n"
@@ -242,7 +262,7 @@ def main(argv=sys.argv[1:]):
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "# Send data each time module timeout is trigger.\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change in sendData() function.\n"
                 file_content += "def sendData(static):\n"
                 file_content += "   output_bytes=b''\n"
                 file_content += "   return static, output_bytes\n"
@@ -286,6 +306,13 @@ def main(argv=sys.argv[1:]):
                     imp.reload(module)
 
                     byte = sim.readData()
+                    if args.print_input_raw == True :
+                        print("> input (hex): %s" % bytes(byte).hex())
+                    if args.print_input_ascii == True:
+                        try:
+                            print("> input (ascii): %s" % bytes(byte).decode('ascii'))
+                        except Exception as e:
+                            print (e)
                     frame += bytes(byte)
 
                     # Process data
@@ -296,6 +323,13 @@ def main(argv=sys.argv[1:]):
                             last_error = ""
                             print("Module error is fix now.")
                         if response != b"":
+                            if args.print_output_raw == True :
+                                print("< output (hex): %s" % bytes(response).hex())
+                            if args.print_output_ascii == True:
+                                try:
+                                    print("< output (ascii): %s" % bytes(response).decode('ascii'))
+                                except Exception as e:
+                                    print (e)
                             sim.sendData(response)
 
             except Exception as e:
@@ -327,6 +361,13 @@ def main(argv=sys.argv[1:]):
                         last_error = ""
                         print("Module error is fix now.")
                     if output_frame != b"":
+                        if args.print_output_raw == True :
+                            print("< output (hex): %s" % bytes(output_frame).hex())
+                        if args.print_output_ascii == True:
+                            try:
+                                print("< output (ascii): %s" % bytes(output_frame).decode('ascii'))
+                            except Exception as e:
+                                print (e)
                         sim.sendData(output_frame)
             except Exception as e:
                 if (run == True) and (last_error != traceback.format_exc()):
@@ -362,4 +403,3 @@ def main(argv=sys.argv[1:]):
 
 # Main execution
 if __name__ == '__main__':
-    sys.exit(main())
