@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+
+# Required modules
 import argparse
 import os
 import sys
@@ -9,21 +11,143 @@ import subprocess
 import time
 import importlib
 import imp
+import traceback
+import socket
+import sys
+import threading
 
 
-script_version="0.1.0"
+# Set version
+script_version="0.1.1"
 
+
+# Template
+class SimuationTemplate:
+    # Constructor
+    def __init__(self, args):
+        return
+
+    # Destructor
+    def __del__(self):
+        return
+    
+    # Send data
+    def sendData(self, bytes_fame):
+        return
+
+    # Read data
+    def readData(self):
+        return b''
+
+
+# Serial port simulation
+class serialSimulation:
+
+    # Constructor
+    def __init__(self, args):
+        print("+ Started serial device simulation")
+
+        # Generate device name
+        if not os.path.exists(args.device_path):
+            os.makedirs(args.device_path)
+        device_port = '%s/tty_%s' % (args.device_path, args.name)
+        Internal_port = '%s/.tty_%s'  % (args.device_path, args.name)
+        i=1
+        while os.path.islink(device_port):
+            if not os.path.exists(os.readlink(device_port)):
+                os.remove(device_port)
+                break
+            device_port = '%s/tty_%s_%i' % (args.device_path, args.name, i)
+            Internal_port = '%s/.tty_%s_%i'  % (args.device_path, args.name, i)
+            i += 1
+
+
+        # Generate virtual port
+        cmd= ['/usr/bin/socat','-d','-d','pty,raw,echo=0,link=%s' % device_port, 'pty,raw,echo=0,link=%s' % Internal_port]
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(1)
+        print ("- Created device: %s" % device_port)
+
+        self.ser = serial.Serial(Internal_port, args.serial_baud, rtscts=True,dsrdtr=True, timeout=0)
+        err = ''
+        out = ''
+        return
+
+    # Destructor
+    def __del__(self):
+        print("+ Terminated serial device simulation")
+        if self.proc != None:
+            self.proc.terminate()
+        return
+
+    # Send data
+    def sendData(self, bytes_fame):
+        self.ser.write(bytes_fame)
+        return
+
+    # Read data
+    def readData(self):
+        return self.ser.read()
+
+
+# TCP-Listener
+class tcpListenSimulation:
+    # Constructor
+    def __init__(self, args):
+        print("+ Started serial device simulation")
+        # Create listen socket
+        HOST = '' # Symbolic name, meaning all available interfaces
+        PORT = int(args.listen_port) # Arbitrary non-privileged port
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print ('- Socket created listening at port %s' % PORT)
+
+
+        try:
+            # Bind socket to local host and port
+            self.s.bind((HOST, PORT))
+            print ('- Socket bind complete')
+        except socket.error as msg:
+            print ('Bind failed!')
+
+
+        #Start listening on socket
+        self.s.listen(1)
+        print ('- Socket now listening')
+
+
+        # wait for connection
+        self.conn, addr = self.s.accept()
+        print ('- Connected with ' + addr[0] + ':' + str(addr[1]))
+        return
+
+    # Destructor
+    def __del__(self):
+        self.s.shutdown(socket.SHUT_RDWR)
+        self.s.close()
+        return
+    
+    # Send data
+    def sendData(self, bytes_fame):
+        self.conn.sendall(bytes_fame)
+        return
+
+    # Read data
+    def readData(self):
+        return self.conn.recv(1024)
+
+
+# Main function
 def main(argv=sys.argv[1:]):
 
     # Parse args
     parser = argparse.ArgumentParser(
-        description='Simulate communicatino end point',
+        description='Tool used to simulate communication endpoint and automatic responses for testing purposes',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--type',
         required=False,
         default="serial",
-        choices={"serial"},
+        choices=["serial", "tcp-listen"],
         help='Conextion type')
     parser.add_argument(
         '--name',
@@ -44,157 +168,198 @@ def main(argv=sys.argv[1:]):
         '--serial-baud',
         required=False,
         default=9600,
-        help='Serial port baud')
+        help='Serial port baud. (only for --type serial)')
+    parser.add_argument(
+        '--listen-port',
+        required=False,
+        default=5000,
+        help='Listener port.  (only for --type tcp-listen)')
     args = parser.parse_args(argv)
 
 
-    #Process args
+    # Process args
     if args.name == "":
         args.name = args.type
 
-    # Serial sim
-    def serialSimulation():
+
+    # execute connection type
+    try:
         print('\nstarting..')
         print ("- Conexion type: %s" % args.type)
 
-        # Generate device name
-        if not os.path.exists(args.device_path):
-            os.makedirs(args.device_path)
-        device_port = '%s/tty_%s' % (args.device_path, args.name)
-        Internal_port = '%s/.tty_%s'  % (args.device_path, args.name)
-        i=1
-        while os.path.islink(device_port):
-            if not os.path.exists(os.readlink(device_port)):
-                os.remove(device_port)
-                break
-            device_port = '%s/tty_%s_%i' % (args.device_path, args.name, i)
-            Internal_port = '%s/.tty_%s_%i'  % (args.device_path, args.name, i)
-            i += 1
-        print ("- Created device: %s" % device_port)
+
+        # Create simulation object
+        if args.type == "serial":
+            sim = serialSimulation(args)
+        elif args.type == "tcp-listen":
+            sim = tcpListenSimulation(args)
 
 
-        # Generate/read responde script
-        module_name =  "%s_response_module" % (args.name)
-        module_path = os.path.join(args.module_path, module_name)
-        if not os.path.exists(module_path):
-            os.makedirs(module_path)
-        print ("- Response module: %s" % module_path)
-        scritp_file = os.path.join(module_path, "__init__.py")
-        if os.path.isfile(scritp_file):
-            print ("- Response module exists")
-        else:
-            file_content = ""
-            file_content += "# Static data.\n"
-            file_content += "# Note: is necesary to restart execution to apply any change\n"
-            file_content += "class static_data:\n"
-            file_content += "   # Trigger/timeout time (in seconds). set to None to wait for data.\n"
-            file_content += "   module_timeout = 1\n"
-            file_content += "\n"
-            file_content += "   # Aux\n"
-            file_content += "   Obj = None\n"
-            file_content += "   Counter = [0]\n"
-            file_content += "   Bool = [False]\n"
-            file_content += "   String = ['']\n"
-            file_content += "\n"
-            file_content += "\n"
-            file_content += "\n"
-            file_content += "# Process incoming data and send response.\n"
-            file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
-            file_content += "def processData(static, input_frame, output_frame):\n"
-            file_content += "   print(\"hex: %s\\nascii: %s\\n\" % (bytes(input_frame).hex(), bytes(input_frame).decode('utf-8')))\n"
-            file_content += "   input_frame = b''\n"
-            file_content += "   output_frame = b''\n"
-            file_content += "   return static, input_frame, output_frame\n"
-            file_content += "\n"
-            file_content += "\n"
-            file_content += "\n"
-            file_content += "# Send data each time module timeout is trigger.\n"
-            file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
-            file_content += "def sendData(static):\n"
-            file_content += "   output_frame=b''\n"
-            file_content += "   return static, output_frame\n"
-            file_content += "\n"
-            file = open(scritp_file, "w") 
-            file.write(file_content)
-            file.close()
-
-            print ("- Response module created")
-
-
-        # Import module
-        sys.path.append(args.module_path)
-        try:
-            module = __import__(module_name)
-        except Exception as e:
-            print ("error: '%s' -> %s" % (scritp_file, e))
+        # Check simulation device
+        if (sim == None):
+            print ("Simulation error")
             return
 
 
-        # Read shared data
-        shared = module.static_data()
+        # Generate/read response script and read static data
+        def procesResponseFile():
+            module_name =  "%s_response_module" % (args.name)
+            module_path = os.path.join(args.module_path, module_name)
+            if not os.path.exists(module_path):
+                os.makedirs(module_path)
+            print ("- Response module: %s" % module_path)
+            scritp_file = os.path.join(module_path, "__init__.py")
+
+            if os.path.isfile(scritp_file):
+                print ("- Response module exists")
+            else:
+                file_content = ""
+                file_content += "# Static data.\n"
+                file_content += "# Note: is necesary to restart execution to apply any change\n"
+                file_content += "class static_data:\n"
+                file_content += "   # Trigger/timeout time (in seconds). set to None to wait for data.\n"
+                file_content += "   module_timeout = 1\n"
+                file_content += "\n"
+                file_content += "   # Aux\n"
+                file_content += "   Obj = None\n"
+                file_content += "   Counter = [0]\n"
+                file_content += "   Bool = [False]\n"
+                file_content += "   String = ['']\n"
+                file_content += "\n"
+                file_content += "\n"
+                file_content += "\n"
+                file_content += "# Process incoming data and send response.\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
+                file_content += "def processData(static, input_bytes, output_bytes):\n"
+                file_content += "   try:\n"
+                file_content += "       print(\"hex: %s\\nascii: %s\\n\" % (bytes(input_bytes).hex(), bytes(input_bytes).decode('utf-8')))\n"
+                file_content += "   except:\n"
+                file_content += "       pass\n"
+                file_content += "   input_bytes = b''\n"
+                file_content += "   output_bytes = b''\n"
+                file_content += "   return static, input_bytes, output_bytes\n"
+                file_content += "\n"
+                file_content += "\n"
+                file_content += "\n"
+                file_content += "# Send data each time module timeout is trigger.\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change.\n"
+                file_content += "def sendData(static):\n"
+                file_content += "   output_bytes=b''\n"
+                file_content += "   return static, output_bytes\n"
+                file_content += "\n"
+                file = open(scritp_file, "w") 
+                file.write(file_content)
+                file.close()
+
+                print ("- Response module created")
+
+            # Import module
+            sys.path.append(args.module_path)
+            try:
+                module = __import__(module_name)
+            except Exception as e:
+                print ("error: '%s' -> %s" % (scritp_file, e))
+                return None
+
+            return module
+        module = procesResponseFile()
+        if module == None:
+            return
 
 
-        # Catch break 
-        try:
-            # Generate virtual port
-            cmd= ['/usr/bin/socat','-d','-d','pty,raw,echo=0,link=%s' % device_port, 'pty,raw,echo=0,link=%s' % Internal_port]
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            time.sleep(1)
-            print("Started!")
+        # define run boolean
+        run = True
 
-            ser = serial.Serial(Internal_port, args.serial_baud, rtscts=True,dsrdtr=True, timeout=0)
-            err = ''
-            out = ''
 
-            # Blucke
-            frame=b""
-            newpid = os.fork()
-            while True:
-                try:
-                    # Reload module
+        # Define reader thread
+        def reader():
+            print ("-", threading.currentThread().getName(), 'Lanzado')
+            try:
+                # Initialize variables
+                last_error=""
+                frame=b""
+                shared = module.static_data()
+
+                # Read from device
+                while run:
+                    # Reload module (to get changes)
                     imp.reload(module)
 
-                    # send process
-                    if newpid == 0:
-                        # Wait
-                        time.sleep(shared.module_timeout)
+                    byte = sim.readData()
+                    frame += bytes(byte)
 
-                        # send data
-                        shared, output_frame = module.sendData(shared)
-                        if output_frame != b"":
-                            ser.write(output_frame)
+                    # Process data
+                    if frame != b"":
+                        response = b""
+                        shared, frame,response = module.processData(shared, frame, response)
+                        if last_error != "":
+                            last_error = ""
+                            print("Module error is fix now.")
+                        if response != b"":
+                            sim.sendData(response)
 
-                    # Receive process
-                    else:
-                        # Read from device
-                        while True:
-                            byte = ser.read()
-                            if byte == b"":
-                                break
-                            frame += byte
-
-                        # Process data
-                        if frame != b"":
-                            response = b""
-                            shared, frame,response = module.processData(shared, frame, response)
-                            if response != b"":
-                                ser.write(response)
-
-                except Exception as e:
-                    print ("error: '%s' -> %s" % (scritp_file, e))
+            except Exception as e:
+                if (run == True) and (last_error != traceback.format_exc()):
+                    last_error = traceback.format_exc()
+                    print(traceback.format_exc())
+            print ("-", threading.currentThread().getName(), 'Deteniendo')
 
 
-        except KeyboardInterrupt:
-            pass
-        finally:
-            proc.terminate()
-            print('\nTerminated!')
+        # Define sender thread
+        def sender():
+            print ("-", threading.currentThread().getName(), 'Lanzado')
+            try:
+                # Initialize variables
+                last_error=""
+                frame=b""
+                shared = module.static_data()
+
+                while run:
+                    # Reload module (to get changes)
+                    imp.reload(module)
+
+                    # Wait
+                    time.sleep(shared.module_timeout)
+
+                    # send data
+                    shared, output_frame = module.sendData(shared)
+                    if last_error != "":
+                        last_error = ""
+                        print("Module error is fix now.")
+                    if output_frame != b"":
+                        sim.sendData(output_frame)
+            except Exception as e:
+                if (run == True) and (last_error != traceback.format_exc()):
+                    last_error = traceback.format_exc()
+                    print(traceback.format_exc())
+            print ("-", threading.currentThread().getName(), 'Deteniendo')
 
 
-    # execute connection type
-    if args.type == "serial":
-        return serialSimulation()
+        # Create threads
+        reader_thread = threading.Thread(target=reader, name='Simulator Reader')
+        sender_thread = threading.Thread(target=sender, name='Simulator Sender')
 
 
+        # start threads
+        reader_thread.start()
+        sender_thread.start()
+
+
+        # Wait for threads
+        reader_thread.join()
+        sender_thread.join()
+
+    except KeyboardInterrupt:
+        print("\n")
+        pass
+
+    finally:
+        print ("- Wait to threads to terminate")
+        run = False
+        reader_thread.join()
+        sender_thread.join()
+
+
+# Main execution
 if __name__ == '__main__':
     sys.exit(main())
