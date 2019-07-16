@@ -18,7 +18,7 @@ import threading
 
 
 # Set version
-script_version="0.1.1"
+script_version="0.1.2"
 
 
 # Template
