@@ -128,12 +128,24 @@ class tcpListenSimulation:
     
     # Send data
     def sendData(self, bytes_fame):
-        self.conn.sendall(bytes_fame)
+        try:
+            self.conn.sendall(bytes_fame)
+        except:
+            print ("- Connection lost (TX)")
         return
 
     # Read data
     def readData(self):
-        return self.conn.recv(1024)
+        try:
+            data = self.conn.recv(1024)
+        except:
+            print ("- Connection lost (RX)")
+
+        if not data:
+            print ("- Need reconnection")
+            self.conn, addr = self.s.accept()
+            print ('- Connected with ' + addr[0] + ':' + str(addr[1]))
+        return data
 
 
 # Main function
