@@ -18,7 +18,7 @@ import threading
 
 
 # Set version
-script_version="0.1.2"
+script_version="0.1.3"
 
 
 # Template
@@ -147,7 +147,6 @@ class tcpListenSimulation:
             print ('- Connected with ' + addr[0] + ':' + str(addr[1]))
         return data
 
-
 # Main function
 def main(argv=sys.argv[1:]):
 
@@ -166,6 +165,11 @@ def main(argv=sys.argv[1:]):
         required=False,
         default="",
         help='name')
+    parser.add_argument(
+        '--id',
+        required=False,
+        default="",
+        help='ID passed to the module. If is not given, an empty string will be save.')
     parser.add_argument(
         '--device-path',
         required=False,
@@ -265,10 +269,18 @@ def main(argv=sys.argv[1:]):
                 file_content += "# Static data.\n"
                 file_content += "# Note: is necesary to restart execution to apply any change in the static data\n"
                 file_content += "class static_data:\n"
-                file_content += "   # Trigger/timeout time (in seconds). set to None to wait for data.\n"
+                file_content += "   # Trigger/timeout time (in seconds).\n"
+                file_content += "   # Set to None to wait for data.\n"
                 file_content += "   module_timeout = 1\n"
                 file_content += "\n"
-                file_content += "   # Aux\n"
+                file_content += "   # Module ID"
+                file_content += "   # Set when execution starts (as a given arg)\n"
+                file_content += "   # Used to disting between differen executions use the same module\n"
+                file_content += "   # If ID is not given as an execution argument, it will be set as an empty string\n"
+                file_content += "   id = \"\"\n"
+                file_content += "\n"
+                file_content += "   # Aux variables\n"
+                file_content += "   # Append any variable before the execution starts\n"
                 file_content += "   Obj = None\n"
                 file_content += "   Counter = [0]\n"
                 file_content += "   Bool = [False]\n"
@@ -276,8 +288,8 @@ def main(argv=sys.argv[1:]):
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "\n"
-                file_content += "# Process incoming data and send response.\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change in processData() function.\n"
+                file_content += "# Process incoming data and send response\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change in processData() function\n"
                 file_content += "def processData(static, input_bytes, output_bytes):\n"
                 file_content += "   input_bytes = b''\n"
                 file_content += "   output_bytes = b''\n"
@@ -285,8 +297,8 @@ def main(argv=sys.argv[1:]):
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "\n"
-                file_content += "# Send data each time module timeout is trigger.\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change in sendData() function.\n"
+                file_content += "# Send data each time module timeout is trigger\n"
+                file_content += "# Note: Is NOT necesary to restart execution to apply any change in sendData() function\n"
                 file_content += "def sendData(static):\n"
                 file_content += "   output_bytes=b''\n"
                 file_content += "   return static, output_bytes\n"
@@ -323,6 +335,7 @@ def main(argv=sys.argv[1:]):
             last_error=""
             frame=b""
             shared = module.static_data()
+            shared.id = args.id
 
             # Read from device
             while run:
@@ -380,6 +393,7 @@ def main(argv=sys.argv[1:]):
             # Initialize variables
             last_error=""
             shared = module.static_data()
+            shared.id = args.id
 
             while run:
                 try:
