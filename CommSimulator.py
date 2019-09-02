@@ -10,15 +10,16 @@ import pty
 import subprocess
 import time
 import importlib
-import imp
+#import imp
 import traceback
 import socket
 import sys
 import threading
+import hashlib
 
 
 # Set version
-script_version="0.1.3"
+script_version="0.2.0"
 
 
 # Template
@@ -102,12 +103,19 @@ class tcpListenSimulation:
         print ('- Socket created listening at port %s' % PORT)
 
 
-        try:
-            # Bind socket to local host and port
-            self.s.bind((HOST, PORT))
-            print ('- Socket bind complete')
-        except socket.error as msg:
-            print ('Bind failed!')
+        retry = True
+        while retry:
+            last_error = ""
+            try:
+                # Bind socket to local host and port
+                #time.sleep(2)
+                self.s.bind((HOST, PORT))
+                print ('- Socket bind complete')
+                retry = False
+            except socket.error as msg:
+                if last_error != msg:
+                    #print (msg)
+                    last_error = msg
 
 
         #Start listening on socket
@@ -147,7 +155,6 @@ class tcpListenSimulation:
             print ('- Connected with ' + addr[0] + ':' + str(addr[1]))
         return data
 
-    
 # Main function
 def main(argv=sys.argv[1:]):
 
@@ -254,6 +261,24 @@ def main(argv=sys.argv[1:]):
             return
 
 
+        # Get last change date method
+        def getModuleHash():
+            # Get module path
+            module_name =  "%s_response_module" % (args.name)
+            module_path = os.path.join(args.module_path, module_name)
+            init_path = os.path.join(module_path, "__init__.py")
+            return hashlib.md5(open(init_path,'rb').read()).hexdigest()
+
+
+        # Get last change date method
+        def getModuleLastUpdate():
+            # Get module path
+            module_name =  "%s_response_module" % (args.name)
+            module_path = os.path.join(args.module_path, module_name)
+            init_path = os.path.join(module_path, "__init__.py")
+            return time.ctime(os.path.getmtime(init_path))
+
+
         # Generate/read response script and read static data
         def procesResponseFile():
             module_name =  "%s_response_module" % (args.name)
@@ -266,43 +291,31 @@ def main(argv=sys.argv[1:]):
             if os.path.isfile(scritp_file):
                 print ("- Response module exists")
             else:
-                file_content = ""
-                file_content += "# Static data.\n"
-                file_content += "# Note: is necesary to restart execution to apply any change in the static data\n"
-                file_content += "class static_data:\n"
-                file_content += "   # Trigger/timeout time (in seconds).\n"
-                file_content += "   # Set to None to wait for data.\n"
-                file_content += "   module_timeout = 1\n"
+                file_content =  "# CommTool simulated device module.\n"
                 file_content += "\n"
-                file_content += "   # Module ID"
-                file_content += "   # Set when execution starts (as a given arg)\n"
-                file_content += "   # Used to disting between differen executions use the same module\n"
-                file_content += "   # If ID is not given as an execution argument, it will be set as an empty string\n"
-                file_content += "   id = \"\"\n"
                 file_content += "\n"
-                file_content += "   # Aux variables\n"
-                file_content += "   # Append any variable before the execution starts\n"
-                file_content += "   Obj = None\n"
-                file_content += "   Counter = [0]\n"
-                file_content += "   Bool = [False]\n"
-                file_content += "   String = ['']\n"
+                file_content += "# Initialize static data map.\n"
+                file_content += "def initStaticData():\n"
+                file_content += "    static = {}\n"
+                file_content += "    return static\n"
                 file_content += "\n"
+                file_content += "\n"
+                file_content += "# Reload static data map. This method is only called when the file is modify during the run time.\n"
+                file_content += "def reloadStaticData(static):\n"
+                file_content += "    return static\n"
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "# Process incoming data and send response\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change in processData() function\n"
                 file_content += "def processData(static, input_bytes, output_bytes):\n"
-                file_content += "   input_bytes = b''\n"
-                file_content += "   output_bytes = b''\n"
-                file_content += "   return static, input_bytes, output_bytes\n"
-                file_content += "\n"
+                file_content += "    input_bytes = b''\n"
+                file_content += "    output_bytes = b''\n"
+                file_content += "    return static, input_bytes, output_bytes\n"
                 file_content += "\n"
                 file_content += "\n"
                 file_content += "# Send data each time module timeout is trigger\n"
-                file_content += "# Note: Is NOT necesary to restart execution to apply any change in sendData() function\n"
                 file_content += "def sendData(static):\n"
-                file_content += "   output_bytes=b''\n"
-                file_content += "   return static, output_bytes\n"
+                file_content += "    output_bytes=b''\n"
+                file_content += "    return static, output_bytes\n"
                 file_content += "\n"
                 file = open(scritp_file, "w") 
                 file.write(file_content)
@@ -314,6 +327,8 @@ def main(argv=sys.argv[1:]):
             sys.path.append(args.module_path)
             try:
                 module = __import__(module_name)
+                #fp, pathname, description = imp.find_module(module_name)
+                #module = imp.load_module(module_name, fp, pathname, description)
             except Exception as e:
                 print ("error: '%s' -> %s" % (scritp_file, e))
                 return None
@@ -335,14 +350,41 @@ def main(argv=sys.argv[1:]):
             # Initialize variables
             last_error=""
             frame=b""
-            shared = module.static_data()
-            shared.id = args.id
+            reader_module = module
+            last_module_hash = getModuleHash()
+            last_module_update = getModuleLastUpdate()
+            reload_module_count = 0
+
+            # Init static data
+            shared_data = {}
+            try:
+                shared_data = reader_module.initStaticData()
+            except:
+                pass
+            shared_data['id'] = args.id
+            if "enable" not in shared_data:
+                shared_data["enable"] = True
+            print("- Reader loaded values: ", shared_data)
+
 
             # Read from device
             while run:
                 try:
-                    # Reload module (to get changes)
-                    imp.reload(module)
+                    # Reload module if it has changed
+                    if last_module_hash != getModuleHash() or last_module_update != getModuleLastUpdate():
+                        reader_module = importlib.reload(reader_module)
+                        last_module_hash = getModuleHash()
+                        last_module_update = getModuleLastUpdate()
+                        reload_module_count += 1
+                        print ("- [%s] Reloaded module" % reload_module_count)
+
+                        # try to call Reload values
+                        try:
+                            shared_data = reader_module.reloadStaticData(shared_data)
+                            print ("- [%s] Reloaded reader module values:" % reload_module_count, shared_data)
+                        except:
+                            print ("! Error reloading reader values")
+                            pass
 
                     # Read data
                     byte = sim.readData()
@@ -356,10 +398,12 @@ def main(argv=sys.argv[1:]):
                                 print("> input (ascii): %s" % bytes(byte).decode('ascii'))
                             except Exception as e:
                                 print (e)
+                        if shared_data["enable"] == False:
+                            continue
                         frame += bytes(byte)
                         frame_aux = frame
                         response = b""
-                        shared, frame,response = module.processData(shared, frame, response)
+                        shared_data, frame,response = reader_module.processData(shared_data, frame, response)
                         if last_error != "":
                             last_error = ""
                             print("Module error is fix now.")
@@ -391,21 +435,51 @@ def main(argv=sys.argv[1:]):
         # Define sender thread
         def sender():
             print ("-", threading.currentThread().getName(), 'Lanzado')
+
             # Initialize variables
             last_error=""
-            shared = module.static_data()
-            shared.id = args.id
+            sender_module = module
+            last_module_hash = getModuleHash()
+            last_module_update = getModuleLastUpdate()
+            reload_module_count = 0
+
+            # Init static data
+            shared_data = {}
+            try:
+                shared_data = sender_module.initStaticData()
+            except:
+                pass
+            shared_data['id'] = args.id
+            if "enable" not in shared_data:
+                shared_data["enable"] = True
+            if "module_timeout" not in shared_data:
+                shared_data["module_timeout"] = 1
+            print("- Sender loaded values: ", shared_data)
+
 
             while run:
                 try:
-                    # Reload module (to get changes)
-                    imp.reload(module)
+                    # Reload module if it has changed
+                    if last_module_hash != getModuleHash() or last_module_update != getModuleLastUpdate():
+                        sender_module = importlib.reload(sender_module)
+                        last_module_hash = getModuleHash()
+                        last_module_update = getModuleLastUpdate()
+                        reload_module_count += 1
+                        print ("- [%s] Reloaded module" % reload_module_count)
+
+                        # try to call Reload values
+                        try:
+                            shared_data = sender_module.reloadStaticData(shared_data)
+                            print ("- [%s] Reloaded sender module values: " % reload_module_count, shared_data)
+                        except:
+                            print ("! Error reloading sender values")
+                            pass
 
                     # Wait
-                    time.sleep(shared.module_timeout)
+                    time.sleep(shared_data["module_timeout"])
 
                     # send data
-                    shared, output_frame = module.sendData(shared)
+                    shared_data, output_frame = sender_module.sendData(shared_data)
                     if last_error != "":
                         last_error = ""
                         print("Module error is fix now.")
